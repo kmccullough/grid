@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="utf-8">
+<title>Grid Search</title>
+
+</head>
+<body>
+
+<style>
+
+.cell {
+  border: 1px solid #444;
+  margin: 1px;
+  padding: .3rem;
+}
+
+</style>
+
+<script type="module">
+
+import dependencies from './dependencies.js';
+import { GridRenderer } from './src/grid-renderer.js';
+import { Size } from './src/util/size.js';
+
+addEventListener('DOMContentLoaded', () => {
+  dependencies
+    .registerConstant(GridRenderer.PARENT_ELEMENT, document.body)
+    .registerConstant(GridRenderer.SIZE, new Size(4, 4))
+    .get(GridRenderer)
+  ;
+});
+
+</script>
+
+</body>
+</html>
+
