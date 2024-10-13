@@ -129,7 +129,7 @@ export class Container {
       if (optional === true) {
         return;
       }
-      throw new Error('Get unregistered dependency ' + dependencyKey);
+      throw new Error('Get unregistered dependency ' + String(dependencyKey));
     }
     const item = this._registryGet(dependencyKey);
     if (item.type === 'constant') {
@@ -248,7 +248,7 @@ export class Container {
     const hash = {};
     for (const config of configs) {
       for (let i = config.length - 1; i >= 0; --i) {
-        const [ hashKey, [ dependencyKey, options ] ] = config[i];
+        const [ hashKey, [ dependencyKey, options = {} ] ] = config[i];
         const optional = options.optional || 'default' in options;
         if (!(hashKey in hash) || options.override !== false) {
           hash[hashKey] = optional && !container.has(dependencyKey) ? options.default

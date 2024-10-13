@@ -1,6 +1,13 @@
 import { CellRenderer } from './cell-renderer.js';
+import { cloneNode } from './util/dom.js';
 
 export class CheckBoxCellRenderer extends CellRenderer {
+  static create() {
+    return {
+      template: [ CellRenderer.TEMPLATE ],
+    };
+  }
+
   input;
 
   _value = false;
@@ -16,19 +23,17 @@ export class CheckBoxCellRenderer extends CellRenderer {
 
   _createElement() {
     const { eventHandler } = this;
-    const el = document.createElement('div');
+    const el = cloneNode(this.template);
     el.classList.add('cell')
-    const label = document.createElement('label');
-    const input = this.input = document.createElement('input');
-    input.type = 'checkbox';
+    const label = el.querySelector('[data-slot-cell-label]');
+    const input = this.input = el.querySelector('[data-slot-cell-input]');
     const renderer = this;
     input.addEventListener('change', function(e) {
       renderer._value = this.checked;
       eventHandler.change?.call(renderer, this, e);
     })
-    label.append(document.createTextNode(`${this.x}, ${this.y}`), input);
-    el.append(label);
-    this._parentElement?.appendChild(el);
+    label.innerHTML = `${this.x}, ${this.y}`;
+    this.parentElement?.appendChild(el);
     return el;
   }
 }

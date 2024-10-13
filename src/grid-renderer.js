@@ -1,14 +1,18 @@
 import { Grid } from './grid.js';
 import { CellRenderer } from './cell-renderer.js';
+import { cloneNode, insertBefore } from './util/dom.js';
 
 export class GridRenderer {
-  static PARENT_ELEMENT = Symbol('GridRenderer.PARENT_ELEMENT');
   static GRID = Symbol('GridRenderer.GRID');
   static SIZE = Symbol('GridRenderer.SIZE');
   static RENDER_GRID = Symbol('GridRenderer.RENDER_GRID');
+  static TEMPLATE = Symbol('GridRenderer.TEMPLATE');
+  static PARENT_ELEMENT = Symbol('GridRenderer.PARENT_ELEMENT');
 
   element;
   grid;
+  template;
+  parentElement;
 
   static create() {
     return {
@@ -17,6 +21,7 @@ export class GridRenderer {
       grid: [ GridRenderer.GRID, { optional: true } ],
       gridSize: [ GridRenderer.SIZE, { optional: true } ],
       renderGrid: [ GridRenderer.RENDER_GRID, { optional: true } ],
+      template: [ GridRenderer.TEMPLATE ],
       parentElement: [ GridRenderer.PARENT_ELEMENT, { optional: true } ],
     };
   }
@@ -29,9 +34,10 @@ export class GridRenderer {
    * @param {Size} [gridSize]
    * @param {Element} [parentElement]
    */
-  constructor({ cellRenderer, gridFactory, grid, renderGrid, gridSize, parentElement }) {
+  constructor({ cellRenderer, gridFactory, grid, renderGrid, gridSize, template, parentElement }) {
     this.cellRenderer = cellRenderer;
-    this._parentElement = parentElement;
+    this.template = template;
+    this.parentElement = parentElement;
     this.grid = !grid ? gridFactory([ [ Grid.SIZE, gridSize ] ])
       : (!gridSize ? grid
         : grid.setRect(0, 0, gridSize.width, gridSize.height) && grid
@@ -78,10 +84,36 @@ export class GridRenderer {
 
   _renderGrid;
   _isRenderQueued = false;
+  _cellTemplate;
+  _cols = new Map();
+  _rows = new Map();
 
   _createElement() {
-    const el = document.createElement('div');
-    this._parentElement?.appendChild(el);
+    const el = this.template.content.cloneNode(true);
+
+    const labelId = 'gridLabel.' + Math.random();
+
+    this._label = el.querySelector('[data-slot-label]');
+    this._labelledBy = el.querySelector('[data-slot-labelled-by]');
+    if (this._label) {
+      this._label.id = labelId;
+      this._label.innerHTML = '';
+      this._labelledBy?.setAttribute('aria-labelled-by', labelId);
+    }
+
+    this._headCol = el.querySelector('[data-slot-head-col]');
+    this._headColEnd = document.createComment('head col');
+    this._headCol.replaceWith(this._headColEnd);
+
+    this._row = el.querySelector('[data-slot-grid-row]');
+    this._rowStart = document.createComment('row start');
+    this._rowEnd = document.createComment('row end');
+    this._row.replaceWith(this._rowStart, this._rowEnd);
+
+    this._cellTemplate = this._row.querySelector('[data-slot-cell]');
+
+    this.parentElement?.appendChild(el);
+
     return el;
   }
 
@@ -90,6 +122,7 @@ export class GridRenderer {
       [ CellRenderer.X, x ],
       [ CellRenderer.Y, y ],
       [ CellRenderer.EVENT_HANDLER, this._cellEventHandler(x, y) ],
+      ...(this._cellTemplate ? [ [ CellRenderer.TEMPLATE, this._cellTemplate ] ] : [])
     ]);
   }
 
@@ -143,18 +176,40 @@ export class GridRenderer {
     const dch = Math.max(0, rch - ch);
     const [ sch, ech ] = dch < 0 ? [ dch, 0 ] : [ 0, dch ];
     console.log('_render', rw, rh, w, h, startTop, endTop);
-    if (!rw || !rh) {
+    for (const [ x, col ] of this._cols) {
+      col.remove();
+    }
+    for (const [ y, row ] of this._rows) {
+      row.remove();
+    }
+    this._rows = new Map();
+    // if (!rw || !rh) {
+      let firstRow = true;
       for (let y = 0; y < h; ++y) {
+        const row = cloneNode(this._row);
+        this._rows.set(y, row);
+        const headRow = row.querySelector('[data-slot-head-row]');
+        headRow.innerHTML = y;
+        const cellEnd = document.createComment('cell');
+        row.querySelector('[data-slot-cell]').replaceWith(cellEnd);
         for (let x = 0; x < w; ++x) {
+          if (firstRow) {
+            const col = cloneNode(this._headCol);
+            this._cols.set(x, col);
+            col.innerHTML = x;
+            insertBefore(col, this._headColEnd);
+          }
           const cell = getCell(x, y);
           console.log('_render2', cell);
-          this.element.appendChild(cell.element);
+          insertBefore(cell.element, cellEnd);
         }
+        firstRow = false;
+        insertBefore(row, this._rowEnd);
       }
-    } else {
-      for (let ioy = startTop; ioy < endTop; ++ioy) {
-        console.log('_render0', ioy);
-      }
-    }
+    // } else {
+    //   for (let ioy = startTop; ioy < endTop; ++ioy) {
+    //     console.log('_render0', ioy);
+    //   }
+    // }
   }
 }
