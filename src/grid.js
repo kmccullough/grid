@@ -64,9 +64,12 @@ export class Grid {
   _getCellKey(x, y) {
     return x + '|' + y;
   }
-  getCell(x, y) {
+  hasCell(x, y) {
+    return this.cells.has(this._getCellKey(x, y));
+  }
+  getCell(x, y, optional = false) {
     const key = this._getCellKey(x, y);
-    if (!this.cells.has(key)) {
+    if (!this.cells.has(key) && !optional) {
       const { initialValue } = this;
       this.cells.set(key,
         typeof initialValue === 'function'

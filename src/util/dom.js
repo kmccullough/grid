@@ -5,3 +5,14 @@ export function cloneNode(node) {
 export function insertBefore(node, refNode) {
   return refNode.parentNode.insertBefore(node, refNode);
 }
+
+export function wrapFragment(node, wrapper = 'div') {
+  if (!(node instanceof DocumentFragment)) {
+    return node;
+  }
+  if (typeof wrapper === 'string') {
+    wrapper = document.createElement(wrapper);
+  }
+  wrapper.appendChild(node);
+  return wrapper;
+}

@@ -2,12 +2,17 @@ import { CellRenderer } from './src/cell-renderer.js';
 import { CheckBoxCellRenderer } from './src/checkbox-cell-renderer.js';
 import { Grid } from './src/grid.js';
 import { GridRenderer } from './src/grid-renderer.js';
+import { FocusHandler } from './src/focus-handler.js';
 import { Container } from './src/util/container.js';
+import { Events } from './src/util/events.js';
 
 export const dependencies = new Container()
-  .registerClass(GridRenderer)
-  .registerClass(Grid, false)
-  .registerClassAs(CellRenderer, CheckBoxCellRenderer, false)
+  .defaultToSingleton(false)
+  .registerClass(Events)
+  .registerClass(FocusHandler)
+  .registerClass(Grid)
+  .registerClassAs(CellRenderer, CheckBoxCellRenderer)
+  .registerClass(GridRenderer, true)
 ;
 
 export default dependencies;

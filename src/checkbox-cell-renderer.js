@@ -21,12 +21,21 @@ export class CheckBoxCellRenderer extends CellRenderer {
     }
   }
 
+  focus() {
+    this._focus.setAttribute('tabindex', '0');
+  }
+
+  blur() {
+    this._focus.setAttribute('tabindex', '-1');
+  }
+
   _createElement() {
     const { eventHandler } = this;
     const el = cloneNode(this.template);
-    el.classList.add('cell')
     const label = el.querySelector('[data-slot-cell-label]');
     const input = this.input = el.querySelector('[data-slot-cell-input]');
+    this._focus = this.input = el.querySelector('[data-slot-cell-focusable]');
+    this.blur();
     const renderer = this;
     input.addEventListener('change', function(e) {
       renderer._value = this.checked;

@@ -6,14 +6,6 @@ export class CellRenderer {
   static TEMPLATE = Symbol('CellRenderer.TEMPLATE');
   static PARENT_ELEMENT = Symbol('CellRenderer.PARENT_ELEMENT');
 
-  x;
-  y;
-  element;
-  eventHandler;
-  value;
-  template;
-  parentElement;
-
   static create() {
     return {
       x: [ CellRenderer.X, { optional: true }],
@@ -24,6 +16,14 @@ export class CellRenderer {
       parentElement: [ CellRenderer.PARENT_ELEMENT, { optional: true } ],
     };
   }
+
+  x;
+  y;
+  element;
+  eventHandler;
+  value;
+  template;
+  parentElement;
 
   constructor({ x, y, eventHandler, value = null, template, parentElement }) {
     if (Object.getPrototypeOf(this) === CellRenderer) {
@@ -36,6 +36,10 @@ export class CellRenderer {
     this.parentElement = parentElement;
     this.element = this._createElement(parentElement);
     this.value = value;
+  }
+
+  focus() {
+
   }
 
   _createElement() {

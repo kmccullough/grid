@@ -1,6 +1,7 @@
 import { Grid } from './grid.js';
 import { CellRenderer } from './cell-renderer.js';
-import { cloneNode, insertBefore } from './util/dom.js';
+import { cloneNode, insertBefore, wrapFragment } from './util/dom.js';
+import { FocusHandler } from './focus-handler.js';
 
 export class GridRenderer {
   static GRID = Symbol('GridRenderer.GRID');
@@ -9,14 +10,10 @@ export class GridRenderer {
   static TEMPLATE = Symbol('GridRenderer.TEMPLATE');
   static PARENT_ELEMENT = Symbol('GridRenderer.PARENT_ELEMENT');
 
-  element;
-  grid;
-  template;
-  parentElement;
-
   static create() {
     return {
       cellRenderer: [ CellRenderer, { factory: true } ],
+      focusHandler: [ FocusHandler, { factory: true } ],
       gridFactory: [ Grid, { factory: true, optional: true } ],
       grid: [ GridRenderer.GRID, { optional: true } ],
       gridSize: [ GridRenderer.SIZE, { optional: true } ],
@@ -26,6 +23,11 @@ export class GridRenderer {
     };
   }
 
+  element;
+  grid;
+  template;
+  parentElement;
+
   /**
    * @param {CellRenderer} cellRenderer
    * @param {function(...args:*):Grid} gridFactory
@@ -34,8 +36,9 @@ export class GridRenderer {
    * @param {Size} [gridSize]
    * @param {Element} [parentElement]
    */
-  constructor({ cellRenderer, gridFactory, grid, renderGrid, gridSize, template, parentElement }) {
+  constructor({ cellRenderer, focusHandler, gridFactory, grid, renderGrid, gridSize, template, parentElement }) {
     this.cellRenderer = cellRenderer;
+    this.focusHandler = focusHandler;
     this.template = template;
     this.parentElement = parentElement;
     this.grid = !grid ? gridFactory([ [ Grid.SIZE, gridSize ] ])
@@ -58,8 +61,11 @@ export class GridRenderer {
     return this;
   }
 
-  getCell(x, y) {
-    return this.grid.getCell(x, y);
+  hasCell(x, y) {
+    return this.grid.hasCell(x, y);
+  }
+  getCell(x, y, optional = false) {
+    return this.grid.getCell(x, y, optional);
   }
   setCell(x, y, value) {
     this.grid.setCell(x, y, value);
@@ -87,9 +93,64 @@ export class GridRenderer {
   _cellTemplate;
   _cols = new Map();
   _rows = new Map();
+  _focusedRow;
+  _focusedCol;
 
   _createElement() {
-    const el = this.template.content.cloneNode(true);
+    const el = wrapFragment(cloneNode(this.template), 'div');
+    const getCell = this._renderGrid.getCell.bind(this._renderGrid);
+    el.addEventListener('keydown', e => {
+      console.log('e', e.key);
+      this._findFocus(e.target);
+
+      let rowCaret = this._focusedRow;
+      let colCaret = this._focusedCol;
+      let nextCell;
+
+      switch (e.key) {
+        case 'ArrowUp':
+          nextCell = this._getNextFocusableCell(0, -1);
+          rowCaret = nextCell.row;
+          colCaret = nextCell.col;
+          break;
+        case 'ArrowDown':
+          nextCell = this._getNextFocusableCell(0, 1);
+          rowCaret = nextCell.row;
+          colCaret = nextCell.col;
+          break;
+        case 'ArrowLeft':
+          nextCell = this._getNextFocusableCell(-1, 0);
+          rowCaret = nextCell.row;
+          colCaret = nextCell.col;
+          break;
+        case 'ArrowRight':
+          nextCell = this._getNextFocusableCell(1, 0);
+          rowCaret = nextCell.row;
+          colCaret = nextCell.col;
+          break;
+        case 'Home':
+          if (e.ctrlKey) {
+            rowCaret = 0;
+          }
+          colCaret = 0;
+          break;
+        case 'End':
+          if (e.ctrlKey) {
+            rowCaret = this.grid.length - 1;
+          }
+          colCaret = this.grid[this._focusedRow].length - 1;
+          break;
+        default:
+          console.log('keydown', e.key, e);
+          return;
+      }
+
+      this._focusCell(rowCaret, colCaret);
+      e.preventDefault();
+    });
+
+    this._shouldWrapCols = el.hasAttribute('data-wrap-cols');
+    this._shouldWrapRows = el.hasAttribute('data-wrap-rows');
 
     const labelId = 'gridLabel.' + Math.random();
 
@@ -117,13 +178,138 @@ export class GridRenderer {
     return el;
   }
 
+  _findFocus(target) {
+    const focusedCell = this.getCell(this._focusedRow, this._focusedCol, true)?.element;
+
+    if (focusedCell === target || focusedCell.contains(target)) {
+      return;
+    }
+
+    for (const [ , { cell } ] of this.grid.cells) {
+      if (cell.element === target || cell.element.contains(target)) {
+        this._setFocus(cell.x, cell.y);
+        return;
+      }
+    }
+  }
+
+  _focusCell(x, y) {
+    if (this._setFocus(x, y)) {
+      this.getCell(x, y).element.focus();
+    }
+  }
+
+  _setFocus(x, y) {
+    const cell = this.getCell(x, y, true);
+    if (!cell) {
+      return false;
+    }
+
+    this.getCell(this._focusedCol, this._focusedRow, true)
+      ?.element.setAttribute('tabindex', -1);
+
+    // this.grid[y][x].removeEventListener('focus', this.showKeysIndicator);
+    // this.grid[y][x].removeEventListener('blur', this.hideKeysIndicator);
+
+    // Disable navigation if focused on an input
+    // this._navigationDisabled = aria.Utils.matches(this.grid[y][x], 'input:not([type="checkbox"])');
+
+    cell.cell.element.setAttribute('tabindex', 0);
+    this._focusedRow = y;
+    this._focusedCol = x;
+
+    // this.grid[y][x].addEventListener('focus', this.showKeysIndicator);
+    // this.grid[y][x].addEventListener('blur', this.hideKeysIndicator);
+
+    return true;
+  }
+  
+  _getNextCell(startX, startY, directionX, directionY) {
+    const startCell = this.getCell(startX, startY, true);
+    let y = startX + directionX;
+    let x = startY + directionY;
+    let rowCount = this.grid.height;
+    let isLeftRight = directionX !== 0;
+
+    if (!rowCount) {
+      return false;
+    }
+
+    let colCount = this.grid.width;
+
+    if (this._shouldWrapCols && isLeftRight) {
+      if (y < 0) {
+        y = colCount - 1;
+        --x;
+      }
+
+      if (y >= colCount) {
+        y = 0;
+        ++x;
+      }
+    }
+
+    if (this._shouldWrapRows && !isLeftRight) {
+      if (x < 0) {
+        --y;
+        x = rowCount - 1;
+        if (y >= 0 && !this.hasCell(x, y)) {
+          // Sometimes the bottom row is not completely filled in. In this case,
+          // jump to the next filled in cell.
+          --x;
+        }
+      } else if (x >= rowCount || !this.hasCell(x, y)) {
+        x = 0;
+        ++y;
+      }
+    }
+
+    return this.getCell(x, y, true) || startCell || false;
+  }
+  
+  _getNextFocusableCell(directionX, directionY) {
+    let nextCell = this._getNextCell(
+      this._focusedRow,
+      this._focusedCol,
+      directionX,
+      directionY
+    );
+
+    if (!nextCell) {
+      return false;
+    }
+
+    while (true/*this.isHidden(nextCell.row, nextCell.col)*/) {
+      const { x, y } = nextCell;
+      nextCell = this._getNextCell(x, y, directionX, directionY);
+      if (y === nextCell.y && x === nextCell.x) {
+        // There are no more cells to try if getNextCell returns the current cell
+        return false;
+      }
+    }
+
+    return nextCell;
+  }
+  
   _initialValue(x, y) {
-    return this.cellRenderer([
+    const cell = this.cellRenderer([
       [ CellRenderer.X, x ],
       [ CellRenderer.Y, y ],
       [ CellRenderer.EVENT_HANDLER, this._cellEventHandler(x, y) ],
       ...(this._cellTemplate ? [ [ CellRenderer.TEMPLATE, this._cellTemplate ] ] : [])
     ]);
+    /** @var {FocusHandler} */
+    const focus = this.focusHandler([
+      [ FocusHandler.CONTAINER, cell.element ],
+      [ FocusHandler.FOCUSABLE, cell.element.querySelector('[data-slot-cell-focusable]') ],
+    ]);
+    focus.on('focus', () => {
+      console.log('focus', ...arguments);
+    });
+    focus.on('blur', () => {
+      console.log('blur', ...arguments);
+    });
+    return { cell, focus };
   }
 
   _cellEventHandler(x, y) {
@@ -200,8 +386,9 @@ export class GridRenderer {
             insertBefore(col, this._headColEnd);
           }
           const cell = getCell(x, y);
-          console.log('_render2', cell);
-          insertBefore(cell.element, cellEnd);
+          // console.log('_render2', cell);
+          // TODO only render what needs to be rendered to prevent focus loss
+          insertBefore(cell.cell.element, cellEnd);
         }
         firstRow = false;
         insertBefore(row, this._rowEnd);

@@ -94,6 +94,11 @@ export class Container {
     this.registerConstant(Container, this);
   }
 
+  defaultToSingleton(defaultsToSingleton) {
+    this.defaultsToSingleton = defaultsToSingleton;
+    return this;
+  }
+
   injectClass(fn) {
     this._classInjector = fn;
     return this;
@@ -103,19 +108,19 @@ export class Container {
     return this;
   }
 
-  registerClassAs(dependencyKey, Class, singleton = true) {
+  registerClassAs(dependencyKey, Class, singleton = null) {
     return this._registrySet(dependencyKey, this._registryClass(dependencyKey, Class, singleton));
   }
-  registerClass(Class, singleton = true) {
+  registerClass(Class, singleton = null) {
     return this.registerClassAs(Class, Class, singleton);
   }
   registerConstant(dependencyKey, value) {
     return this._registrySet(dependencyKey, this._registryConstant(dependencyKey, value));
   }
-  registerFactoryAs(dependencyKey, factory, singleton = true, context = null, ...args) {
+  registerFactoryAs(dependencyKey, factory, singleton = null, context = null, ...args) {
     return this._registrySet(dependencyKey, this._registryFactory(dependencyKey, factory, singleton, context, ...args));
   }
-  registerFactory(factory, singleton = true, context = null, ...args) {
+  registerFactory(factory, singleton = null, context = null, ...args) {
     return this.registerFactoryAs(factory, factory, singleton, context, ...args);
   }
 
@@ -156,7 +161,7 @@ export class Container {
   _registryClass(dependencyKey, Class, singleton) {
     return { type: 'class', dependencyKey, class: Class, singleton };
   }
-  _registryFactory(dependencyKey, factory, singleton = true, context = null, ...args) {
+  _registryFactory(dependencyKey, factory, singleton = null, context = null, ...args) {
     return { type: 'factory', dependencyKey, factory, singleton, context, args };
   }
   _registryConstant(dependencyKey, value) {
@@ -165,7 +170,7 @@ export class Container {
 
   _getFactory(item, optionsOrOptional) {
     const deps = optionsOrOptional?.dependencies;
-    if (!item.singleton) {
+    if (!item.singleton && !this.defaultsToSingleton) {
       return moreDeps => this._instantiate(item,
         !(deps || moreDeps) ? null
           : [ ...(deps || []), ...(moreDeps || []) ]
