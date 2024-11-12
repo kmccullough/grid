@@ -2,6 +2,8 @@ import { Grid } from './grid.js';
 import { CellRenderer } from './cell-renderer.js';
 import { cloneNode, insertBefore, wrapFragment } from './util/dom.js';
 import { FocusHandler } from './focus-handler.js';
+import { GridIterator } from './grid-iterator.js';
+import { softSet } from './util/object.js';
 
 export class GridRenderer {
   static GRID = Symbol('GridRenderer.GRID');
@@ -9,17 +11,19 @@ export class GridRenderer {
   static RENDER_GRID = Symbol('GridRenderer.RENDER_GRID');
   static TEMPLATE = Symbol('GridRenderer.TEMPLATE');
   static PARENT_ELEMENT = Symbol('GridRenderer.PARENT_ELEMENT');
+  static ITERATOR = Symbol('GridRenderer.ITERATOR');
 
   static create() {
     return {
       cellRenderer: [ CellRenderer, { factory: true } ],
       focusHandler: [ FocusHandler, { factory: true } ],
-      gridFactory: [ Grid, { factory: true, optional: true } ],
+      gridFactory: [ Grid, { factory: true } ],
       grid: [ GridRenderer.GRID, { optional: true } ],
       gridSize: [ GridRenderer.SIZE, { optional: true } ],
       renderGrid: [ GridRenderer.RENDER_GRID, { optional: true } ],
       template: [ GridRenderer.TEMPLATE ],
       parentElement: [ GridRenderer.PARENT_ELEMENT, { optional: true } ],
+      iterator: [ GridIterator ],
     };
   }
 
@@ -30,17 +34,22 @@ export class GridRenderer {
 
   /**
    * @param {CellRenderer} cellRenderer
+   * @param {FocusHandler} focusHandler
    * @param {function(...args:*):Grid} gridFactory
    * @param {Grid} [grid]
    * @param {Grid} [renderGrid]
    * @param {Size} [gridSize]
+   * @param {Node} [template]
    * @param {Element} [parentElement]
+   * @param {GridIterator} [iterator]
    */
-  constructor({ cellRenderer, focusHandler, gridFactory, grid, renderGrid, gridSize, template, parentElement }) {
+  constructor({ cellRenderer, focusHandler, gridFactory, grid, renderGrid, gridSize, template, parentElement, iterator }) {
     this.cellRenderer = cellRenderer;
     this.focusHandler = focusHandler;
     this.template = template;
     this.parentElement = parentElement;
+    this.iterator = iterator.colsOfRows().topToBottom().leftToRight();
+    this.gridFactory = gridFactory;
     this.grid = !grid ? gridFactory([ [ Grid.SIZE, gridSize ] ])
       : (!gridSize ? grid
         : grid.setRect(0, 0, gridSize.width, gridSize.height) && grid
@@ -50,11 +59,16 @@ export class GridRenderer {
     this.render();
   }
 
-  setCellSize(width, height = width) {
-    this.grid.setCellSize(width, height);
-    this.render();
-    return this;
+  setCellSize(size, offset = null) {
+    this.grid.setCellSize(size, offset);
+    return this.render();
   }
+
+  setCellOffset(offset) {
+    this.grid.setCellOffset(offset);
+    return this.render();
+  }
+
   resize(side, amount) {
     this.grid.resize(side, amount);
     this.render();
@@ -64,9 +78,11 @@ export class GridRenderer {
   hasCell(x, y) {
     return this.grid.hasCell(x, y);
   }
+
   getCell(x, y, optional = false) {
     return this.grid.getCell(x, y, optional);
   }
+
   setCell(x, y, value) {
     this.grid.setCell(x, y, value);
     const rendered = this._renderGrid.getCell(x, y);
@@ -181,7 +197,7 @@ export class GridRenderer {
   _findFocus(target) {
     const focusedCell = this.getCell(this._focusedRow, this._focusedCol, true)?.element;
 
-    if (focusedCell === target || focusedCell.contains(target)) {
+    if (focusedCell && (focusedCell === target || focusedCell.contains(target))) {
       return;
     }
 
@@ -200,26 +216,33 @@ export class GridRenderer {
   }
 
   _setFocus(x, y) {
+    // TODO getCell is pointing to the wrong grid
     const cell = this.getCell(x, y, true);
+    console.log('_setFocus', x, y, cell);
     if (!cell) {
       return false;
     }
 
-    this.getCell(this._focusedCol, this._focusedRow, true)
-      ?.element.setAttribute('tabindex', -1);
+    const oldFocus = this.getCell(this._focusedCol, this._focusedRow, true);
+    console.log(oldFocus, cell);
+    if (oldFocus !== cell || cell.cell.element.getAttribute('tabindex') === '-1') {
+      if (oldFocus !== cell) {
+        oldFocus.element.setAttribute('tabindex', -1);
+      }
 
-    // this.grid[y][x].removeEventListener('focus', this.showKeysIndicator);
-    // this.grid[y][x].removeEventListener('blur', this.hideKeysIndicator);
+      // this.grid[y][x].removeEventListener('focus', this.showKeysIndicator);
+      // this.grid[y][x].removeEventListener('blur', this.hideKeysIndicator);
 
-    // Disable navigation if focused on an input
-    // this._navigationDisabled = aria.Utils.matches(this.grid[y][x], 'input:not([type="checkbox"])');
+      // Disable navigation if focused on an input
+      // this._navigationDisabled = aria.Utils.matches(this.grid[y][x], 'input:not([type="checkbox"])');
 
-    cell.cell.element.setAttribute('tabindex', 0);
-    this._focusedRow = y;
-    this._focusedCol = x;
+      cell.cell.element.setAttribute('tabindex', 0);
+      this._focusedRow = y;
+      this._focusedCol = x;
 
-    // this.grid[y][x].addEventListener('focus', this.showKeysIndicator);
-    // this.grid[y][x].addEventListener('blur', this.hideKeysIndicator);
+      // this.grid[y][x].addEventListener('focus', this.showKeysIndicator);
+      // this.grid[y][x].addEventListener('blur', this.hideKeysIndicator);
+    }
 
     return true;
   }
@@ -305,11 +328,13 @@ export class GridRenderer {
     ]);
     focus.on('focus', () => {
       console.log('focus', ...arguments);
+      this._setFocus(cell.x, cell.y);
     });
     focus.on('blur', () => {
       console.log('blur', ...arguments);
     });
-    return { cell, focus };
+    const cellValue = { cell, focus };
+    return cellValue;
   }
 
   _cellEventHandler(x, y) {
@@ -323,80 +348,75 @@ export class GridRenderer {
   }
 
   _render() {
-    const {
-      cellOffset: { x: cx, y: cy },
-      cellSize: { width: cw, height: ch },
-      offset: { x: ox, y: oy },
-      size: { width: w, height: h },
-    } = this.grid;
-    const {
-      cellOffset: { x: rcx, y: rcy },
-      cellSize: { width: rcw, height: rch },
-      offset: { x: rox, y: roy },
-      size: { width: rw, height: rh },
-    } = this._renderGrid;
+    const { iterator } = this;
+    const sourceGrid = this.grid;
+    const renderGrid = this._renderGrid;
+    const { size, offset, cellSize, cellOffset } = sourceGrid;
+    const hasAllCellChange = cellSize.width !== renderGrid.cellSize.width
+      || cellSize.height !== renderGrid.cellSize.height
+      || cellOffset.x !== renderGrid.cellOffset.x
+      || cellOffset.y !== renderGrid.cellOffset.y;
+    const targetGrid = this.gridFactory([
+      [ Grid.SIZE, size ],
+      [ Grid.OFFSET, offset ],
+    ]);
+    renderGrid.setSize(size, offset);
+    renderGrid.setCellSize(cellSize, cellOffset);
     const getCell = this._renderGrid.getCell.bind(this._renderGrid);
 
-    this._renderGrid.offset.x = ox;
-    this._renderGrid.offset.y = oy;
-    this._renderGrid.cellOffset.x = cx;
-    this._renderGrid.cellOffset.y = cy;
-    this._renderGrid.size.width = w;
-    this._renderGrid.size.height = h;
-    this._renderGrid.cellSize.width = cw;
-    this._renderGrid.cellSize.height = ch;
-    const dox = rox - ox;
-    const [ sox, eox ] = dox < 0 ? [ dox, 0 ] : [ 0, dox ];
-    const doy = roy - oy;
-    const [ startTop, endTop ] = doy < 0 ? [ doy, 0 ] : [ 0, doy ];
-    const dcx = rcx - cx;
-    const [ scx, ecx ] = dcx < 0 ? [ dcx, 0 ] : [ 0, dcx ];
-    const dcy = rcy - cy;
-    const [ scy, ecy ] = dcy < 0 ? [ dcy, 0 ] : [ 0, dcy ];
-    const dw = Math.max(0, rw - w);
-    const [ startRight, endRight ] = dw < 0 ? [ dw, 0 ] : [ 0, dw ];
-    const dh = Math.max(0, rh - h);
-    const [ sh, eh ] = dh < 0 ? [ dh, 0 ] : [ 0, dh ];
-    const dcw = Math.max(0, rcw - cw);
-    const [ scw, ecw ] = dcw < 0 ? [ dcw, 0 ] : [ 0, dcw ];
-    const dch = Math.max(0, rch - ch);
-    const [ sch, ech ] = dch < 0 ? [ dch, 0 ] : [ 0, dch ];
-    console.log('_render', rw, rh, w, h, startTop, endTop);
-    for (const [ x, col ] of this._cols) {
-      col.remove();
-    }
-    for (const [ y, row ] of this._rows) {
-      row.remove();
-    }
-    this._rows = new Map();
-    // if (!rw || !rh) {
-      let firstRow = true;
-      for (let y = 0; y < h; ++y) {
-        const row = cloneNode(this._row);
-        this._rows.set(y, row);
-        const headRow = row.querySelector('[data-slot-head-row]');
-        headRow.innerHTML = y;
-        const cellEnd = document.createComment('cell');
-        row.querySelector('[data-slot-cell]').replaceWith(cellEnd);
-        for (let x = 0; x < w; ++x) {
-          if (firstRow) {
-            const col = cloneNode(this._headCol);
-            this._cols.set(x, col);
-            col.innerHTML = x;
-            insertBefore(col, this._headColEnd);
-          }
-          const cell = getCell(x, y);
-          // console.log('_render2', cell);
-          // TODO only render what needs to be rendered to prevent focus loss
-          insertBefore(cell.cell.element, cellEnd);
+    let firstRow = true;
+    iterator
+      // First render, grids may be same size, and we need to render new elements,
+      // but on subsequent renders we can skip unchanged cells already rendered,
+      // unless cell size/offset changed, then we need to update labels.
+      .skipUnchanged(!!(this._hasRendered && !hasAllCellChange))
+      .eachRowOrCol(sourceGrid, targetGrid, (y, state) => {
+        console.log('itr', y, state);
+        let row = this._rows.get(y);
+        if (!row) {
+          const element = cloneNode(this._row);
+          const insertion = document.createComment('cell');
+          element.querySelector('[data-slot-cell]').replaceWith(insertion);
+          row = {
+            element,
+            insertion,
+            heading: element.querySelector('[data-slot-head-row]'),
+          };
+          this._rows.set(y, row);
+          insertBefore(row.element, this._rowEnd);
         }
+        // Set `y`/`row` coordinate on left heading of table
+        row.heading && softSet(row.heading, 'innerHTML', y);
+        // Iterate each col/cell of row
+        iterator.eachCellOfRowOrCol(y, sourceGrid, targetGrid, (x, y, sourceCell, targetCell, state) => {
+          console.log('it', x, y, state);
+
+          if (firstRow) {
+            let col = this._cols.get(x);
+            if (!col) {
+              col = cloneNode(this._headCol);
+              this._cols.set(x, col);
+              insertBefore(col, this._headColEnd);
+            }
+            // Set `x`/`col` coordinate on top heading of table
+            softSet(col, 'innerHTML', x);
+          }
+
+          const cell = getCell(x, y);
+          if (!row.insertion.parentNode.contains(cell.cell.element)) {
+            insertBefore(cell.cell.element, row.insertion);
+          }
+        });
         firstRow = false;
-        insertBefore(row, this._rowEnd);
-      }
-    // } else {
-    //   for (let ioy = startTop; ioy < endTop; ++ioy) {
-    //     console.log('_render0', ioy);
-    //   }
-    // }
+      });
+
+    const focusedCell = this.getCell(this._focusedRow, this._focusedCol, true);
+    if (focusedCell) {
+      focusedCell.focus.focus();
+    }
+
+      if (!this._hasRendered) {
+      this._hasRendered = true;
+    }
   }
 }

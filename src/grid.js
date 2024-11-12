@@ -3,6 +3,7 @@ import { Size } from './util/size.js';
 
 export class Grid {
   static SIZE = 'Grid.SIZE';
+  static OFFSET = 'Grid.OFFSET';
   static INITIAL_VALUE = 'Grid.INITIAL_VALUE';
 
   static TOP = 1;
@@ -11,30 +12,26 @@ export class Grid {
   static LEFT = 8;
 
   size;
+  offset;
   initialValue;
   cellSize = new Size(1);
   cellOffset = new Position();
-  offset = new Position();
   cells = new Map();
 
   static create() {
     return {
       size: [ Grid.SIZE, { optional: true } ],
+      offset: [ Grid.OFFSET, { optional: true } ],
       initialValue: [ Grid.INITIAL_VALUE, { optional: true } ],
     };
   }
 
-  constructor({ size, initialValue }) {
-    this.size = new Size();
+  constructor({ size, offset, initialValue }) {
+    const { width = 0, height = 0 } = size || {};
+    const { x = 0, y = 0 } = offset || {};
+    this.size = new Size(width, height);
+    this.offset = new Position(x, y);
     this.initialValue = initialValue ?? null;
-    this.resize(Grid.RIGHT, size?.width ?? 0)
-      .resize(Grid.BOTTOM, size?.height ?? 0);
-  }
-
-  setCellSize(width, height = null) {
-    this.cellSize.width = width;
-    this.cellSize.height = height ?? width;
-    return this;
   }
 
   resize(side, amount) {
@@ -52,6 +49,22 @@ export class Grid {
     return this;
   }
 
+  setSize(size, offset = null) {
+    this.size.width = size.width;
+    this.size.height = size.height;
+    if (offset) {
+      this.offset.x = offset.x;
+      this.offset.y = offset.y;
+    }
+    return this;
+  }
+
+  setOffset(offset) {
+    this.offset.x = offset.x;
+    this.offset.y = offset.y;
+    return this;
+  }
+
   setRect(left, top, right, bottom) {
     // TODO account for inverted coordinates
     this.offset.x = left;
@@ -61,12 +74,30 @@ export class Grid {
     return this;
   }
 
-  _getCellKey(x, y) {
-    return x + '|' + y;
+  setCellSize(size, offset = null) {
+    this.cellOffset.width = size.width;
+    this.cellOffset.height = size.height;
+    if (offset) {
+      this.cellOffset.x = offset.x;
+      this.cellOffset.y = offset.y;
+    }
+    return this;
   }
+
+  setCellOffset(offset = null) {
+    this.cellOffset.x = offset.x;
+    this.cellOffset.y = offset.y;
+    return this;
+  }
+
+  _getCellKey(x, y) {
+    return x + ',' + y;
+  }
+
   hasCell(x, y) {
     return this.cells.has(this._getCellKey(x, y));
   }
+
   getCell(x, y, optional = false) {
     const key = this._getCellKey(x, y);
     if (!this.cells.has(key) && !optional) {
@@ -78,6 +109,7 @@ export class Grid {
     }
     return this.cells.get(key);
   }
+
   setCell(x, y, value) {
     this.cells.set(this._getCellKey(x, y), value);
   }
