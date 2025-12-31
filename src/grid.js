@@ -16,6 +16,8 @@ export class Grid {
   initialValue;
   cellSize = new Size(1);
   cellOffset = new Position();
+  position = new Position();
+  positionFraction = new Position();
   cells = new Map();
 
   static create() {
@@ -74,9 +76,13 @@ export class Grid {
     return this;
   }
 
+  getCellSize() {
+    return this.cellSize;
+  }
+
   setCellSize(size, offset = null) {
-    this.cellOffset.width = size.width;
-    this.cellOffset.height = size.height;
+    this.cellSize.width = size.width;
+    this.cellSize.height = size.height;
     if (offset) {
       this.cellOffset.x = offset.x;
       this.cellOffset.y = offset.y;
@@ -88,6 +94,47 @@ export class Grid {
     this.cellOffset.x = offset.x;
     this.cellOffset.y = offset.y;
     return this;
+  }
+
+  getPosition() {
+    return this.position;
+  }
+
+  getPositionFraction() {
+    return this.positionFraction;
+  }
+
+  setPosition(position, positionFraction = new Position()) {
+    this.position = position;
+    this.positionFraction = positionFraction;
+  }
+
+  movePixelPosition(dx, dy) {
+    const {
+      cellSize: { width: cellWidth, height: cellHeight },
+      position, positionFraction,
+    } = this;
+    const x = this.getCoordinatePosition(
+      position.x, positionFraction.x, cellWidth, dx
+    );
+    const y = this.getCoordinatePosition(
+      position.y, positionFraction.y, cellHeight, dy
+    );
+    const px = Math.floor(x);
+    const py = Math.floor(y);
+    this.setPosition(
+      new Position(px, py),
+      new Position(x - px, y - py),
+    );
+    return this;
+  }
+
+  getCoordinatePosition(pos, frac, size, delta = 0) {
+    return -this.getCoordinatePixelPosition(pos, frac, size, delta) / size;
+  }
+
+  getCoordinatePixelPosition(pos, frac, size, delta = 0) {
+    return -(pos + frac) * size + delta;
   }
 
   _getCellKey(x, y) {

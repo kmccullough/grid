@@ -1,62 +1,106 @@
-import { Grid } from './grid.js';
-import { CellRenderer } from './cell-renderer.js';
-import { cloneNode, insertBefore, wrapFragment } from './util/dom.js';
-import { FocusHandler } from './focus-handler.js';
+import { FocusHandler } from '../focus-handler.js';
+import { Grid } from '../grid.js';
+import { GridCellRenderer } from './grid-cell-renderer.js';
 import { GridIterator } from './grid-iterator.js';
-import { softSet } from './util/object.js';
+import { GridScroller } from './grid-scroller.js';
+import { cloneNode, insertBefore, wrapFragment } from '../util/dom.js';
+import { softSet } from '../util/object.js';
+import { ObjectPool } from '../util/object-pool.js';
+import { Size } from '../util/size.js';
+import { HotArray } from '../util/hot-array.js';
 
 export class GridRenderer {
   static GRID = Symbol('GridRenderer.GRID');
   static SIZE = Symbol('GridRenderer.SIZE');
   static RENDER_GRID = Symbol('GridRenderer.RENDER_GRID');
-  static TEMPLATE = Symbol('GridRenderer.TEMPLATE');
   static PARENT_ELEMENT = Symbol('GridRenderer.PARENT_ELEMENT');
+  static ELEMENT = Symbol('GridRenderer.ELEMENT');
+  static ELEMENT_POOL = Symbol('GridRenderer.ELEMENT_POOL');
   static ITERATOR = Symbol('GridRenderer.ITERATOR');
+  static SCROLLER = Symbol('GridRenderer.SCROLLER');
 
   static create() {
     return {
-      cellRenderer: [ CellRenderer, { factory: true } ],
+      cellRenderer: [ GridCellRenderer, { factory: true } ],
       focusHandler: [ FocusHandler, { factory: true } ],
       gridFactory: [ Grid, { factory: true } ],
       grid: [ GridRenderer.GRID, { optional: true } ],
       gridSize: [ GridRenderer.SIZE, { optional: true } ],
       renderGrid: [ GridRenderer.RENDER_GRID, { optional: true } ],
-      template: [ GridRenderer.TEMPLATE ],
       parentElement: [ GridRenderer.PARENT_ELEMENT, { optional: true } ],
+      element: [ GridRenderer.ELEMENT, { optional: true } ],
+      elementPool: [ GridRenderer.ELEMENT_POOL, { optional: true } ],
       iterator: [ GridIterator ],
+      scroller: [ GridRenderer.SCROLLER ],
     };
   }
 
   element;
   grid;
-  template;
   parentElement;
+  // cell offset from top left of grid window
+  offset = { x: 0, y: 0, z: 0 };
+  visibleCells = new HotArray();
 
   /**
-   * @param {CellRenderer} cellRenderer
+   * @param {GridCellRenderer} cellRenderer
    * @param {FocusHandler} focusHandler
    * @param {function(...args:*):Grid} gridFactory
+   * @param {GridScroller} scroller
    * @param {Grid} [grid]
    * @param {Grid} [renderGrid]
    * @param {Size} [gridSize]
-   * @param {Node} [template]
    * @param {Element} [parentElement]
+   * @param {Element} [element]
+   * @param {ObjectPool} [elementPool]
    * @param {GridIterator} [iterator]
    */
-  constructor({ cellRenderer, focusHandler, gridFactory, grid, renderGrid, gridSize, template, parentElement, iterator }) {
+  constructor({
+    cellRenderer,
+    focusHandler,
+    gridFactory,
+    grid,
+    renderGrid,
+    gridSize,
+    parentElement,
+    element,
+    elementPool,
+    iterator,
+    scroller,
+  }) {
     this.cellRenderer = cellRenderer;
     this.focusHandler = focusHandler;
-    this.template = template;
     this.parentElement = parentElement;
     this.iterator = iterator.colsOfRows().topToBottom().leftToRight();
     this.gridFactory = gridFactory;
-    this.grid = !grid ? gridFactory([ [ Grid.SIZE, gridSize ] ])
+    this._setupElementPool(elementPool);
+    this._setupVisibleCellPool();
+    this.setGrid(
+      !grid ? gridFactory([ [ Grid.SIZE, gridSize ] ])
       : (!gridSize ? grid
         : grid.setRect(0, 0, gridSize.width, gridSize.height) && grid
-      );
+      )
+    );
     this._renderGrid = renderGrid ?? gridFactory([ [ Grid.INITIAL_VALUE, this._initialValue.bind(this) ] ]);
-    this.element = this._createElement();
+    this.setCellSize(new Size(200, 50));
+    this.setElement(element);
+    this.scroller = scroller;
+    scroller.init(this);
     this.render();
+  }
+
+  // TODO create a size testing element with aria-hidden="true" and visibility: hidden
+
+  setElement(element) {
+    this._element = element;
+  }
+
+  setGrid(grid) {
+    this.grid = grid;
+  }
+
+  getCellSize() {
+    return this.grid.getCellSize();
   }
 
   setCellSize(size, offset = null) {
@@ -66,6 +110,24 @@ export class GridRenderer {
 
   setCellOffset(offset) {
     this.grid.setCellOffset(offset);
+    return this.render();
+  }
+
+  getPosition() {
+    return this.grid.getPosition();
+  }
+
+  getPositionFraction() {
+    return this.grid.getPositionFraction();
+  }
+
+  setPosition(position, positionFraction = null) {
+    this.grid.setPosition(position, positionFraction);
+    return this.render();
+  }
+
+  movePixelPosition(dx, dy) {
+    this.grid.movePixelPosition(dx, dy);
     return this.render();
   }
 
@@ -99,6 +161,11 @@ export class GridRenderer {
     this._isRenderQueued = true;
     requestAnimationFrame(() => {
       this._isRenderQueued = false;
+      if (this._lastRender + this._frameDelta > Date.now()) {
+        this.render();
+        return;
+      }
+      this._lastRender = Date.now();
       this._render();
     });
     return this;
@@ -111,6 +178,50 @@ export class GridRenderer {
   _rows = new Map();
   _focusedRow;
   _focusedCol;
+  _roundTo = 1;
+
+  _fps = 30;
+  _frameDelta = 1000 / this._fps;
+  _lastRender = -Infinity;
+
+  _setupElementPool(elementPool = new ObjectPool()) {
+    const border = '1px solid rgba(0, 0, 0, 0.5)';
+    this.elementPool = elementPool
+      .onCreate(() => {
+        const el = document.createElement('div');
+        Object.assign(el.style, {
+          position: 'absolute',
+          boxSizing: 'border-box',
+          borderTop: border,
+          borderLeft: border,
+          backgroundColor: 'white',
+          left: 0,
+          top: 0,
+          willChange: 'width, height, transform',
+        });
+        this._element.appendChild(el);
+        return el;
+      })
+      .onBorrow(el => {
+        const cellSize = this.getCellSize();
+        Object.assign(el.style, {
+          width: `round(${cellSize.width}px, ${this._roundTo}px)`,
+          height: `round(${cellSize.height}px, ${this._roundTo}px)`,
+        });
+        el.style.removeProperty('display');
+      })
+      .onRelease(el => {
+        el.style.display = 'none';
+      })
+    ;
+  }
+
+  _setupVisibleCellPool(visibleCellPool = new ObjectPool()) {
+    this.visibleCellPool = visibleCellPool
+      .onCreate(() => new HotArray())
+      .onRelease(cells => cells.clear())
+    ;
+  }
 
   _createElement() {
     const el = wrapFragment(cloneNode(this.template), 'div');
@@ -316,10 +427,9 @@ export class GridRenderer {
   
   _initialValue(x, y) {
     const cell = this.cellRenderer([
-      [ CellRenderer.X, x ],
-      [ CellRenderer.Y, y ],
-      [ CellRenderer.EVENT_HANDLER, this._cellEventHandler(x, y) ],
-      ...(this._cellTemplate ? [ [ CellRenderer.TEMPLATE, this._cellTemplate ] ] : [])
+      [ GridCellRenderer.X, x ],
+      [ GridCellRenderer.Y, y ],
+      [ GridCellRenderer.EVENT_HANDLER, this._cellEventHandler(x, y) ],
     ]);
     /** @var {FocusHandler} */
     const focus = this.focusHandler([
@@ -363,6 +473,57 @@ export class GridRenderer {
     renderGrid.setSize(size, offset);
     renderGrid.setCellSize(cellSize, cellOffset);
     const getCell = this._renderGrid.getCell.bind(this._renderGrid);
+
+    const { width: pxCellWidth, height: pxCellHeight } = cellSize;
+    const el = this._element;
+    const { width, height } = el.getBoundingClientRect();
+    const isInfinite = true;
+    const isCentered = false;//isInfinite;
+
+    const cells = this.visibleCells;
+
+    const { x: px, y: py } = sourceGrid.getPosition();
+    const { x: fx, y: fy } = sourceGrid.getPositionFraction();
+
+    const pxPosX = this.grid.getCoordinatePixelPosition(px, fx, pxCellWidth);
+    const pxPosY = this.grid.getCoordinatePixelPosition(py, fy, pxCellHeight);
+
+    let pxStartX = pxPosX % pxCellWidth;
+    if (pxStartX > 0) {
+      pxStartX -= pxCellWidth;
+    }
+    let pxStartY = pxPosY % pxCellHeight;
+    if (pxStartY > 0) {
+      pxStartY -= pxCellHeight;
+    }
+    const visibleCellsWidth = Math.ceil(
+      (width - (pxStartX < 0 ? pxStartX : 0))
+      / pxCellWidth
+    );
+    const visibleCellsHeight = Math.ceil(
+      (height - (pxStartY < 0 ? pxStartY : 0))
+      / pxCellHeight
+    );
+
+    this.elementPool.releaseAll();
+
+    let cellCount = 0;
+    for (let iCellY = 0; iCellY < visibleCellsHeight; ++iCellY) {
+      const y = pxStartY + iCellY * pxCellHeight;
+      for (let iCellX = 0; iCellX < visibleCellsWidth; ++iCellX) {
+        const x = pxStartX + iCellX * pxCellWidth;
+        const cellEl = this.elementPool.borrow();
+        Object.assign(cellEl.style, {
+          transform: 'translate('
+            + `round(${x}px, ${this._roundTo}px),`
+            + `round(${y}px, ${this._roundTo}px)`
+          + ')',
+        });
+        cellEl.innerText = `${px + iCellX}, ${py + iCellY}`;
+        ++cellCount;
+      }
+    }
+    console.log('Rendered', cellCount)
 
     let firstRow = true;
     iterator
@@ -415,7 +576,7 @@ export class GridRenderer {
       focusedCell.focus.focus();
     }
 
-      if (!this._hasRendered) {
+    if (!this._hasRendered) {
       this._hasRendered = true;
     }
   }

@@ -1,4 +1,4 @@
-export class CellRenderer {
+export class GridCellRenderer {
   static X = Symbol('CellRenderer.X');
   static Y = Symbol('CellRenderer.Y');
   static EVENT_HANDLER = Symbol('CellRenderer.EVENT_HANDLER');
@@ -8,12 +8,12 @@ export class CellRenderer {
 
   static create() {
     return {
-      x: [ CellRenderer.X, { optional: true }],
-      y: [ CellRenderer.Y, { optional: true } ],
-      eventHandler: [ CellRenderer.EVENT_HANDLER, { optional: true } ],
-      value: [ CellRenderer.VALUE, { optional: true } ],
-      template: [ CellRenderer.TEMPLATE, { optional: true } ],
-      parentElement: [ CellRenderer.PARENT_ELEMENT, { optional: true } ],
+      x: [ GridCellRenderer.X, { optional: true }],
+      y: [ GridCellRenderer.Y, { optional: true } ],
+      eventHandler: [ GridCellRenderer.EVENT_HANDLER, { optional: true } ],
+      value: [ GridCellRenderer.VALUE, { optional: true } ],
+      template: [ GridCellRenderer.TEMPLATE, { optional: true } ],
+      parentElement: [ GridCellRenderer.PARENT_ELEMENT, { optional: true } ],
     };
   }
 
@@ -26,7 +26,7 @@ export class CellRenderer {
   parentElement;
 
   constructor({ x, y, eventHandler, value = null, template, parentElement }) {
-    if (Object.getPrototypeOf(this) === CellRenderer) {
+    if (Object.getPrototypeOf(this) === GridCellRenderer) {
       throw new Error('CellRenderer is abstract');
     }
     this.x = +x || 0;

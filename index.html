@@ -16,45 +16,18 @@
 </style>
 
 <script type="module">
-
-import dependencies from './dependencies.js';
-import { GridRenderer } from './src/grid-renderer.js';
-import { Size } from './src/util/size.js';
-
-dependencies
-  .registerConstant(GridRenderer.PARENT_ELEMENT, document.body)
-  .registerConstant(GridRenderer.TEMPLATE, document.querySelector('#tpl-grid'))
-  .registerConstant(GridRenderer.SIZE, new Size(4, 4))
-  .get(GridRenderer)
-;
-
+import dependencies from './src/dependencies.js';
+import { App } from './src/app.js';
+dependencies.get(App);
 </script>
 
 </head>
 <body>
 
-<template id="tpl-grid">
+<div id="grid" role="grid"
+  style="position:absolute;inset:0;overflow:hidden;border:1px solid #ccc;">
   <h4 data-slot-label aria-live="polite">Grid Live Description</h4>
-  <div class="table-wrap">
-    <table data-slot-labelled-by role="grid" class="data">
-    <tbody>
-      <tr>
-        <th data-slot-head-corner></th>
-        <th data-slot-head-col>${x}</th>
-      </tr>
-      <tr data-slot-grid-row>
-        <th data-slot-head-row>${y}</th>
-        <td data-slot-cell class="cell">
-          <label>
-            <span data-slot-cell-label></span>
-            <input data-slot-cell-input data-slot-cell-focusable type="checkbox">
-          </label>
-        </td>
-      </tr>
-    </tbody>
-    </table>
-  </div>
-</template>
+</div>
 
 </body>
 </html>

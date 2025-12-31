@@ -88,7 +88,7 @@ export class Container {
    */
   registry = new PassiveMap();
 
-  isInstantiating = false;
+  isServing = false;
 
   constructor() {
     this.registerConstant(Container, this);
@@ -99,11 +99,11 @@ export class Container {
     return this;
   }
 
-  injectClass(fn) {
+  classInjector(fn) {
     this._classInjector = fn;
     return this;
   }
-  injectFactory(fn) {
+  factoryInjector(fn) {
     this._factoryInjector = fn;
     return this;
   }
@@ -123,42 +123,79 @@ export class Container {
   registerFactory(factory, singleton = null, context = null, ...args) {
     return this.registerFactoryAs(factory, factory, singleton, context, ...args);
   }
+  registerModule(module) {
+    module(this);
+    return this;
+  }
+
+  options(optionsOrOptional) {
+    return optionsOrOptional && typeof optionsOrOptional === 'object'
+      ? optionsOrOptional
+      : (optionsOrOptional || (optionsOrOptional ?? true))
+        ? { optional: optionsOrOptional } : null;
+  }
 
   has(dependencyKey) {
     return this._registryHas(dependencyKey);
   }
 
   get(dependencyKey, optionsOrOptional) {
-    const optional = optionsOrOptional === true || optionsOrOptional?.optional;
+    const item = this._registryGet(dependencyKey, optionsOrOptional);
     if (!this._registryHas(dependencyKey)) {
-      if (optional === true) {
-        return;
+      if (typeof optionsOrOptional !== 'object' ? optionsOrOptional === true
+        : (optionsOrOptional.optional || 'default' in optionsOrOptional)
+      ) {
+        return optionsOrOptional?.default;
       }
       throw new Error('Get unregistered dependency ' + String(dependencyKey));
     }
-    const item = this._registryGet(dependencyKey);
     if (item.type === 'constant') {
-      return item.value;
+      return optionsOrOptional?.factory ? () => item.value : item.value;
     }
-    return this._getFactory(item, optionsOrOptional)();
+    const factory = this._getFactory(item, optionsOrOptional);
+    return optionsOrOptional?.factory ? factory : factory();
   }
 
-  factory(dependencyKey, optionsOrOptional) {
-    const optional = optionsOrOptional === true || optionsOrOptional?.optional;
-    if (!this._registryHas(dependencyKey)) {
-      if (optional === true) {
-        return;
+  peek(dependencyKey, optionsOrOptional) {
+    return this.get(dependencyKey, {
+      ...this.options(optionsOrOptional),
+      peek: true,
+    });
+  }
+  
+  getAll(dependencies, container = this) {
+    const isArray = Array.isArray(dependencies);
+    const result = isArray ? [] : {};
+    let hashKey, dependencyKey, options;
+    dependencies = isArray ? dependencies : Object.entries(dependencies);
+    for (const dependencyConfig of dependencies) {
+      if (isArray) {
+        [ [ dependencyKey, options ] ] = dependencyConfig;
+        result.push(container.get(dependencyKey, options));
+      } else {
+        [ hashKey, [ dependencyKey, options ] ] = dependencyConfig;
+        result[hashKey] = container.get(dependencyKey, options);
       }
-      throw new Error('Get unregistered factory ' + dependencyKey);
     }
-    const item = this._registryGet(dependencyKey);
-    if (item.type === 'constant') {
-      return () => item.value;
-    }
-    return this._getFactory(item, optionsOrOptional);
+    return result;
+  }
+
+  injectClass(Class, dependencies) {
+    return this._injectClass(Class, this._proxyDependencies(dependencies));
+  }
+  injectFactory(factory, dependencies, context = null, ...args) {
+    return this._injectFactory({
+      args, context, factory,
+    }, this._proxyDependencies(dependencies));
   }
 
   _registryClass(dependencyKey, Class, singleton) {
+    let Proto = Class;
+    do {
+      if (typeof Proto.container === 'function') {
+        Proto.container(this);
+      }
+    } while ((Proto = Object.getPrototypeOf(Proto)) && Proto !== Object);
     return { type: 'class', dependencyKey, class: Class, singleton };
   }
   _registryFactory(dependencyKey, factory, singleton = null, context = null, ...args) {
@@ -183,15 +220,15 @@ export class Container {
     return this.registry.has(dependencyKey);
   }
 
-  _registryGet(dependencyKey) {
-    if (!this.isInstantiating) {
-      this.isInstantiating = true;
+  _registryGet(dependencyKey, optionsOrOptional) {
+    if (!this.isServing && !optionsOrOptional?.peek) {
+      this.isServing = true;
     }
     return this.registry.get(dependencyKey);
   }
 
   _registrySet(dependencyKey, value) {
-    if (this.isInstantiating) {
+    if (this.isServing) {
       throw new Error('Cannot register with container; already serving dependencies');
     }
     this.registry.set(dependencyKey, value);
@@ -243,26 +280,23 @@ export class Container {
     if (Class === Object) {
       return new Class();
     }
-    const configs = [];
+    const dependencyLists = [];
     let Proto = Class;
     do {
       if (typeof Proto.create === 'function') {
-        configs.push(Object.entries(Proto.create()));
+        dependencyLists.push(Object.entries(Proto.create()));
       }
     } while ((Proto = Object.getPrototypeOf(Proto)) && Proto !== Object);
     const hash = {};
-    for (const config of configs) {
-      for (let i = config.length - 1; i >= 0; --i) {
-        const [ hashKey, [ dependencyKey, options = {} ] ] = config[i];
-        const optional = options.optional || 'default' in options;
-        if (!(hashKey in hash) || options.override !== false) {
-          hash[hashKey] = optional && !container.has(dependencyKey) ? options.default
-            : options.factory ? container.factory(dependencyKey, optional)
-            : container.get(dependencyKey, optional);
+    for (const dependencies of dependencyLists) {
+      for (const dependencyConfig of dependencies) {
+        const [ hashKey, [ dependencyKey, options ] ] = dependencyConfig;
+        if (!(hashKey in hash) || options?.override !== false) {
+          hash[hashKey] = container.get(dependencyKey, options);
         }
       }
     }
-    return configs.length ? new Class(hash) : new Class(container);
+    return dependencyLists.length ? new Class(hash) : new Class(container);
   }
 
   _defaultFactoryInjector({ factory, container, context, args }) {
