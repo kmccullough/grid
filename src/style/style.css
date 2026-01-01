@@ -1,0 +1,22 @@
+.sr-only:not(:focus):not(:active) {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.grid {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border: 1px solid #ccc;
+}
+
+.cell {
+  border: 1px solid #444;
+  margin: 1px;
+  padding: .3rem;
+}

@@ -1,6 +1,6 @@
 import { GridCellCoordinates } from './grid-cell-coordinates.js';
 
-export class GridCell {
+export default class GridCell {
   static wrap(cell) {
     return cell instanceof GridCell ? cell : new GridCell(cell)
   }

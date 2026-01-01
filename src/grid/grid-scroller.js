@@ -1,6 +1,6 @@
-import { Position } from '../util/position.js';
+import Position from '../util/position.js';
 
-export class GridScroller {
+export default class GridScroller {
   gridRenderer;
 
   constructor() {

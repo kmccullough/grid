@@ -1,10 +1,10 @@
-import { GridRenderer } from './grid/grid-renderer.js';
+import GridRenderer from './grid/grid-renderer.js';
 
-export class App {
+export default class App {
+  static GRID = Symbol('App.GRID');
+
   static container(container) {
-    container
-      .registerConstant(GridRenderer.PARENT_ELEMENT, document.body)
-      .registerConstant(GridRenderer.ELEMENT, document.getElementById('grid'))
+    container.registerAlias(App.GRID, GridRenderer.ELEMENT);
   }
 
   static create() {

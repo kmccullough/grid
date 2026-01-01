@@ -1,11 +1,11 @@
-import { CheckBoxCellRenderer } from '../checkbox-cell-renderer.js';
-import { Grid } from '../grid.js';
-import { GridCellRenderer } from './grid-cell-renderer.js';
-import { GridIterator } from './grid-iterator.js';
-import { GridRenderer } from './grid-renderer.js';
-import { GridScroller } from './grid-scroller.js';
+import CheckBoxCellRenderer from '../checkbox-cell-renderer.js';
+import Grid from '../grid.js';
+import GridCellRenderer from './grid-cell-renderer.js';
+import GridIterator from './grid-iterator.js';
+import GridRenderer from './grid-renderer.js';
+import GridScroller from './grid-scroller.js';
 
-export function gridDependencies(container) {
+export default function gridDependencies(container) {
   return container
     .registerClass(Grid)
     .registerClassAs(GridCellRenderer, CheckBoxCellRenderer)

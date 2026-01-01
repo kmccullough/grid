@@ -1,4 +1,4 @@
-export class Events {
+export default class Events {
   events = new Map();
 
   has(event, callback) {

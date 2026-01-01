@@ -1,6 +1,6 @@
-import { Events } from './events.js';
+import Events from './events.js';
 
-export class ObjectPool {
+export default class ObjectPool {
   events = new Events();
   borrowed = new Set;
   objects = new Set;

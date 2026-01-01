@@ -1,7 +1,7 @@
-import { Position } from './util/position.js';
-import { Size } from './util/size.js';
+import Position from './util/position.js';
+import Size from './util/size.js';
 
-export class Grid {
+export default class Grid {
   static SIZE = 'Grid.SIZE';
   static OFFSET = 'Grid.OFFSET';
   static INITIAL_VALUE = 'Grid.INITIAL_VALUE';

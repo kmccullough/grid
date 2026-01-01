@@ -1,10 +1,10 @@
-import { Events } from './util/events.js';
+import Events from './util/events.js';
 
 /**
  * @typedef {'focus'|'blur'} FocusHandlerEvent
  */
 
-export class FocusHandler {
+export default class FocusHandler {
   static EVENTS = Symbol('FocusHandler.EVENTS');
   static CONTAINER = Symbol('FocusHandler.CONTAINER');
   static FOCUSABLE = Symbol('FocusHandler.FOCUSABLE');

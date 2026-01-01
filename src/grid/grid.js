@@ -1,4 +1,4 @@
-export class Grid {
+export default class Grid {
   /** @type {Map<string,GridCell>} */
   cells = new Map;
   constructor(data) {

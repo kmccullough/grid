@@ -1,4 +1,4 @@
-export class GridCellRenderer {
+export default class GridCellRenderer {
   static X = Symbol('CellRenderer.X');
   static Y = Symbol('CellRenderer.Y');
   static EVENT_HANDLER = Symbol('CellRenderer.EVENT_HANDLER');

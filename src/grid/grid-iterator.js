@@ -34,7 +34,7 @@
  * @param {Grid} targetGrid
  */
 
-export class GridIterator {
+export default class GridIterator {
   constructor(config) {
     this.config(config);
   }

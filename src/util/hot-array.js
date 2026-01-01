@@ -1,4 +1,4 @@
-export class HotArray {
+export default class HotArray {
   items = {};
 
   constructor(headWindow = 10000, excessWindow = 10000) {

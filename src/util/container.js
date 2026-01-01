@@ -1,4 +1,4 @@
-import { PassiveMap } from './passive-map.js';
+import PassiveMap from './passive-map.js';
 
 const proxyMethodsMap = new WeakMap();
 function proxyMethods(proxy, target, prop) {
@@ -69,7 +69,7 @@ function proxyMethods(proxy, target, prop) {
  *   .registerClass(SomeObject)
  *   .get(SomeObject);
  */
-export class Container {
+export default class Container {
   /**
    * @typedef {Object} ContainerRegisteredItem
    * @property {'class'|'constant'|'factory'} type Type of registered item
@@ -87,6 +87,7 @@ export class Container {
    * @type {PassiveMap<*,ContainerRegisteredItem>}
    */
   registry = new PassiveMap();
+  aliases = new PassiveMap();
 
   isServing = false;
 
@@ -127,6 +128,13 @@ export class Container {
     module(this);
     return this;
   }
+  registerAlias(aliasKey, dependencyKey) {
+    this._assertRegistry();
+    if (this.aliases.has(dependencyKey)) {
+      throw new Error(`Cannot register with container; alias already exists: ${String(dependencyKey)}`);
+    }
+    this.aliases.set(dependencyKey, aliasKey);
+  }
 
   options(optionsOrOptional) {
     return optionsOrOptional && typeof optionsOrOptional === 'object'
@@ -140,15 +148,29 @@ export class Container {
   }
 
   get(dependencyKey, optionsOrOptional) {
-    const item = this._registryGet(dependencyKey, optionsOrOptional);
+    let item;
+    let aliasKey = dependencyKey;
+    let aliases = [ dependencyKey ];
+    while (this.aliases.has(aliasKey)) {
+      aliasKey = this.aliases.get(aliasKey);
+      aliases.push(aliasKey);
+    }
+    dependencyKey = aliasKey;
     if (!this._registryHas(dependencyKey)) {
       if (typeof optionsOrOptional !== 'object' ? optionsOrOptional === true
         : (optionsOrOptional.optional || 'default' in optionsOrOptional)
       ) {
         return optionsOrOptional?.default;
       }
-      throw new Error('Get unregistered dependency ' + String(dependencyKey));
+      if (aliases.length > 1) {
+        aliases = aliases.toReversed().map(a => String(a)).join('->');
+        throw new Error(`Get unregistered aliased dependency: ${aliases}`);
+      } else {
+        throw new Error(`Get unregistered dependency: ${String(dependencyKey)}`);
+      }
     }
+    item = this._registryGet(dependencyKey, optionsOrOptional);
+
     if (item.type === 'constant') {
       return optionsOrOptional?.factory ? () => item.value : item.value;
     }
@@ -228,11 +250,15 @@ export class Container {
   }
 
   _registrySet(dependencyKey, value) {
+    this._assertRegistry();
+    this.registry.set(dependencyKey, value);
+    return this;
+  }
+
+  _assertRegistry() {
     if (this.isServing) {
       throw new Error('Cannot register with container; already serving dependencies');
     }
-    this.registry.set(dependencyKey, value);
-    return this;
   }
 
   _instantiate(item, dependencies = null) {

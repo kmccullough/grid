@@ -5,30 +5,24 @@
 <meta charset="utf-8">
 <title>Grid Search</title>
 
-<style>
-
-.cell {
-  border: 1px solid #444;
-  margin: 1px;
-  padding: .3rem;
-}
-
-</style>
+<link rel="stylesheet" href="./src/style/style.css">
 
 <script type="module">
 import dependencies from './src/dependencies.js';
-import { App } from './src/app.js';
-dependencies.get(App);
+import App from './src/app.js';
+dependencies
+  .registerConstant(App.GRID, document.getElementById('grid'))
+  .get(App);
 </script>
 
 </head>
 <body>
 
-<div id="grid" role="grid"
-  style="position:absolute;inset:0;overflow:hidden;border:1px solid #ccc;">
-  <h4 data-slot-label aria-live="polite">Grid Live Description</h4>
+<div id="grid" class="grid" role="grid">
+  <h4 class="sr-only" aria-live="polite" aria-atomic="true">
+    Current position: X 0, Y 0
+  </h4>
 </div>
 
 </body>
 </html>
-

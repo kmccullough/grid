@@ -1,6 +1,6 @@
 import { GridCellCoordinates } from '../grid/grid-cell-coordinates.js';
 
-export class PooledGrid {
+export default class PooledGrid {
   cellWidth = 100;
   cellHeight = 30;
 

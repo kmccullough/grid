@@ -1,7 +1,7 @@
-import { GridCellRenderer } from './grid/grid-cell-renderer.js';
+import GridCellRenderer from './grid/grid-cell-renderer.js';
 import { cloneNode } from './util/dom.js';
 
-export class CheckBoxCellRenderer extends GridCellRenderer {
+export default class CheckBoxCellRenderer extends GridCellRenderer {
   static create() {
     return {
       template: [ GridCellRenderer.TEMPLATE ],

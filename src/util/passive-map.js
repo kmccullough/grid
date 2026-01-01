@@ -1,6 +1,6 @@
 class PassiveMapWeakRef extends WeakRef {}
 
-export class PassiveMap {
+export default class PassiveMap {
   _map = new Map();
   _weakRefMap = new WeakMap();
   constructor(entries = []) {

@@ -1,4 +1,4 @@
-export class GridCellCoordinates {
+export default class GridCellCoordinates {
   static wrap(coords) {
     return coords instanceof GridCellCoordinates ? coords : new GridCellCoordinates(coords)
   }

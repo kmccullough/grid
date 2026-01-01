@@ -1,4 +1,4 @@
-export class Position {
+export default class Position {
   static add(...positions) {
     return new Position().add(...positions);
   }

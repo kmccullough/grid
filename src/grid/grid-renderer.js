@@ -1,19 +1,18 @@
-import { FocusHandler } from '../focus-handler.js';
-import { Grid } from '../grid.js';
-import { GridCellRenderer } from './grid-cell-renderer.js';
-import { GridIterator } from './grid-iterator.js';
-import { GridScroller } from './grid-scroller.js';
+import FocusHandler from '../focus-handler.js';
+import Grid from '../grid.js';
+import GridCellRenderer from './grid-cell-renderer.js';
+import GridIterator from './grid-iterator.js';
+import GridScroller from './grid-scroller.js';
 import { cloneNode, insertBefore, wrapFragment } from '../util/dom.js';
 import { softSet } from '../util/object.js';
-import { ObjectPool } from '../util/object-pool.js';
-import { Size } from '../util/size.js';
-import { HotArray } from '../util/hot-array.js';
+import ObjectPool from '../util/object-pool.js';
+import Size from '../util/size.js';
+import HotArray from '../util/hot-array.js';
 
-export class GridRenderer {
+export default class GridRenderer {
   static GRID = Symbol('GridRenderer.GRID');
   static SIZE = Symbol('GridRenderer.SIZE');
   static RENDER_GRID = Symbol('GridRenderer.RENDER_GRID');
-  static PARENT_ELEMENT = Symbol('GridRenderer.PARENT_ELEMENT');
   static ELEMENT = Symbol('GridRenderer.ELEMENT');
   static ELEMENT_POOL = Symbol('GridRenderer.ELEMENT_POOL');
   static ITERATOR = Symbol('GridRenderer.ITERATOR');
@@ -27,8 +26,7 @@ export class GridRenderer {
       grid: [ GridRenderer.GRID, { optional: true } ],
       gridSize: [ GridRenderer.SIZE, { optional: true } ],
       renderGrid: [ GridRenderer.RENDER_GRID, { optional: true } ],
-      parentElement: [ GridRenderer.PARENT_ELEMENT, { optional: true } ],
-      element: [ GridRenderer.ELEMENT, { optional: true } ],
+      element: [ GridRenderer.ELEMENT ],
       elementPool: [ GridRenderer.ELEMENT_POOL, { optional: true } ],
       iterator: [ GridIterator ],
       scroller: [ GridRenderer.SCROLLER ],
@@ -37,7 +35,6 @@ export class GridRenderer {
 
   element;
   grid;
-  parentElement;
   // cell offset from top left of grid window
   offset = { x: 0, y: 0, z: 0 };
   visibleCells = new HotArray();
@@ -50,7 +47,6 @@ export class GridRenderer {
    * @param {Grid} [grid]
    * @param {Grid} [renderGrid]
    * @param {Size} [gridSize]
-   * @param {Element} [parentElement]
    * @param {Element} [element]
    * @param {ObjectPool} [elementPool]
    * @param {GridIterator} [iterator]
@@ -62,7 +58,6 @@ export class GridRenderer {
     grid,
     renderGrid,
     gridSize,
-    parentElement,
     element,
     elementPool,
     iterator,
@@ -70,7 +65,6 @@ export class GridRenderer {
   }) {
     this.cellRenderer = cellRenderer;
     this.focusHandler = focusHandler;
-    this.parentElement = parentElement;
     this.iterator = iterator.colsOfRows().topToBottom().leftToRight();
     this.gridFactory = gridFactory;
     this._setupElementPool(elementPool);
@@ -299,8 +293,6 @@ export class GridRenderer {
     this._row.replaceWith(this._rowStart, this._rowEnd);
 
     this._cellTemplate = this._row.querySelector('[data-slot-cell]');
-
-    this.parentElement?.appendChild(el);
 
     return el;
   }
